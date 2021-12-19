@@ -242,7 +242,8 @@ def evaluate_tiered(model, eval_dataloader, device, metrics, seg_mode=False, ret
   all_conflicts = None
 
   all_pred_stories = None
-  all_stories = None  
+  all_stories = None
+  
   if return_softmax:
     all_prob_stories = None
   
@@ -445,7 +446,7 @@ def evaluate_tiered(model, eval_dataloader, device, metrics, seg_mode=False, ret
 
   metr_stories = compute_metrics(all_pred_stories.flatten(), all_stories.flatten(), metrics)
 
-  verifiability, explanations = verifiable_reasoning(all_stories, all_pred_stories, all_conflicts, all_pred_conflicts, all_prec, all_pred_prec, all_eff, all_pred_eff, return_explanations=True)
+  verifiability, explanations = verifiable_reasoning(all_stories, all_pred_stories, all_prob_stories, all_conflicts, all_pred_conflicts, all_prec, all_pred_prec, all_eff, all_pred_eff, return_explanations=True)
   metr_stories['verifiability'] = verifiability
 
   if verbose:
@@ -469,7 +470,7 @@ def evaluate_tiered(model, eval_dataloader, device, metrics, seg_mode=False, ret
 # 1) Story prediction is correct
 # 2) Conflicting sentences are correct
 # 3) All nontrivial predicted states in the conflicting sentences are correct
-def verifiable_reasoning(stories, pred_stories, conflicts, pred_conflicts, preconditions, pred_preconditions, effects, pred_effects, return_explanations=False):
+def verifiable_reasoning(stories, pred_stories, all_prob_stories, conflicts, pred_conflicts, preconditions, pred_preconditions, effects, pred_effects, return_explanations=False):
   atts = list(att_default_values.keys())
 
   verifiable = 0
@@ -478,6 +479,7 @@ def verifiable_reasoning(stories, pred_stories, conflicts, pred_conflicts, preco
   for i, ex in enumerate(stories):
     l_story = stories[i]
     p_story = pred_stories[i]
+    prob_story = all_prob_stories[i].tolist()
 
     l_conflict = np.sum(conflicts, axis=(1,2))[i]
     p_conflict = np.sum(pred_conflicts.reshape(conflicts.shape), axis=(1,2))[i]
@@ -491,6 +493,7 @@ def verifiable_reasoning(stories, pred_stories, conflicts, pred_conflicts, preco
     p_eff = pred_effects.reshape(list(conflicts.shape[:4]) + [effects.shape[-1]])[i,1-l_story] # (num entities, num sentences, num attributes)
 
     explanation = {'story_label': int(l_story),
+                   'story_prob' : prob_story,
                    'story_pred': int(p_story),
                    'conflict_label': [int(c) for c in l_conflict],
                    'conflict_pred': [int(c) for c in p_conflict],
@@ -563,7 +566,7 @@ def add_entity_attribute_labels(explanations, dataset, attributes):
             if j < len(bad_story['sentences']):
               new_states[ent][j] = {}
               for k, att_ann in enumerate(sent_anns):
-                if int(att_ann) != att_default_values[attributes[k]] and int(att_ann) > 0:
+#                 if int(att_ann) != att_default_values[attributes[k]] and int(att_ann) > 0:
                   att = attributes[k]
                   new_states[ent][j][att] = int(att_ann)
       expl[key] = new_states

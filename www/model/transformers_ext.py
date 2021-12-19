@@ -139,9 +139,14 @@ class ClassificationHead(nn.Module):
           drop_out = getattr(config, "dropout_rate", None)
         if drop_out is None:
           drop_out = getattr(config, "hidden_dropout_prob", None)
+        if drop_out is None:
+          drop_out = getattr(config, "dropout", None)
         assert drop_out is not None, "Didn't set dropout!"
         self.dropout = nn.Dropout(drop_out)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+        hidden_size = getattr(config, "hidden_size", None)
+        if hidden_size is None:
+          hidden_size = getattr(config, "d_model", None)
+        self.out_proj = nn.Linear(hidden_size, config.num_labels)
         self.num_labels = config.num_labels
         self.input_all_tokens = input_all_tokens
 
@@ -152,6 +157,8 @@ class ClassificationHead(nn.Module):
           x = features
         x = self.dropout(x)
         x = self.dense(x)
+        
+        
         x = torch.tanh(x)
         if return_embeddings:
           emb = x
@@ -174,15 +181,20 @@ class TieredModelPipeline(nn.Module):
       drop_out = getattr(embedding.config, "dropout_rate", None)
     if drop_out is None:
       drop_out = getattr(embedding.config, "hidden_dropout_prob", None)
+    if drop_out is None:
+      drop_out = getattr(embedding.config, "dropout", None)
     assert drop_out is not None, "Didn't set dropout!"
-    self.dropout = nn.Dropout(drop_out)   
+    self.dropout = nn.Dropout(drop_out)
 
     # State classifiers
     self.num_attributes = num_attributes
     self.labels_per_att = labels_per_att
     self.num_state_labels = sum(list(labels_per_att.values()))
 
-    self.attribute_classifier = nn.Linear(embedding.config.hidden_size, num_attributes)
+    if model_name in ["xlnet-base-cased", "t5-base", "t5-small"]:
+        self.attribute_classifier = nn.Linear(embedding.config.d_model, num_attributes)
+    else:
+        self.attribute_classifier = nn.Linear(embedding.config.hidden_size, num_attributes)
 
     config = config_class.from_pretrained(model_name)
     self.precondition_classifiers = []
@@ -191,8 +203,6 @@ class TieredModelPipeline(nn.Module):
       config.num_labels = labels_per_att[i]
       self.precondition_classifiers.append(ClassificationHead(config, input_all_tokens=False).to(device))
       self.effect_classifiers.append(ClassificationHead(config, input_all_tokens=False).to(device))
-    self.precondition_classifiers = nn.ModuleList(self.precondition_classifiers)
-    self.effect_classifiers = nn.ModuleList(self.effect_classifiers)
     
     # Conflict detector components
     embedding_proj_size = 256
@@ -220,7 +230,10 @@ class TieredModelPipeline(nn.Module):
 
     # Project to same size
     if 'embeddings' not in ablation:
-      self.embedding_proj = nn.Linear(embedding.config.hidden_size, embedding_proj_size)
+      if model_name in ["xlnet-base-cased", "t5-base", "t5-small"]:
+        self.embedding_proj = nn.Linear(embedding.config.d_model, embedding_proj_size)
+      else:
+        self.embedding_proj = nn.Linear(embedding.config.hidden_size, embedding_proj_size)
     if 'states' not in ablation:
       self.states_proj = nn.Linear(self.states_size, embedding_proj_size)
     if 'states-attention' in ablation:
@@ -261,7 +274,24 @@ class TieredModelPipeline(nn.Module):
     for i in range(num_entities):
       length_mask[input_entities <= i, i, :] = 0 # Use input entity counts to zero out state and conflict preds wherever there isn't an entity
     length_mask = length_mask.view(batch_size * num_stories * num_entities, num_sents)
+    
+    decoder_start_token_id = 0
+    pad_token_id = 0
 
+    # shift inputs to the right
+#     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+#     shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+#     shifted_input_ids[..., 0] = decoder_start_token_id
+#     print("s_input_ids: ", shifted_input_ids)
+#     print("s_input_ids shape: ", shifted_input_ids.shape())
+
+#     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+#     sample_input_ids = input_ids.view(batch_size * num_stories * num_entities * num_sents, -1).long().size()
+#     print("input shape: ", input_ids.view(batch_size * num_stories * num_entities * num_sents, -1).long().size())
+#     batch_size, sequence = sample_input_ids
+#     print(batch_size, sequence)
+#     print("labels: ", labels)
+#     print("labels shape: ", labels.size())
     # 1) Embed the inputs
     if token_type_ids is not None:
       print(token_type_ids)
@@ -274,12 +304,15 @@ class TieredModelPipeline(nn.Module):
     else:
       out = self.embedding(
               input_ids.view(batch_size * num_stories * num_entities * num_sents, -1).long(),
+#               decoder_input_ids = input_ids.view(batch_size * num_stories * num_entities * num_sents, -1).long(), toggle this line if using T5Model (not T5EncoderModel)
               attention_mask=attention_mask.view(batch_size * num_stories * num_entities * num_sents, -1) if attention_mask is not None else None,
               output_hidden_states=False)
       
     if len(out[0].shape) < 3:
       out[0] = out[0].unsqueeze(0)
     out = out[0][:,0,:] # entity-sentence embeddings
+    
+#     print("out: ", out)
 
 
     # 2) State classification
