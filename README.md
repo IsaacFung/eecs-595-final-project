@@ -43,9 +43,11 @@ Configure the cells below the first heading of [Verifiable-Coherent-NLU.ipynb](V
 
 You may either re-train the models from the papers, or use our pre-trained model instances (see below).
 
+You may use the existing results_cloze_explanations files to reproduce the ensemble labels with [Ensemble-Story-Prob.ipynb](Ensemble-Story-Prob.ipynb). However, you can also re-train the models or use the other pre-trained model instances with the notebook. You will simply need to change the paths for the models used as well as the accompanying variables in the notebook.
+
 ### Pre-Trained Model Instances
 
-Pretrained model instances of XLnet and T5 model are avaialble here:- https://drive.google.com/drive/u/1/folders/1pE0Q5Kw4-WUK_swn2Qi5Qk16X282wimJ
+Pretrained model instances of XLnet and T5 model are available here:- https://drive.google.com/drive/u/1/folders/1pE0Q5Kw4-WUK_swn2Qi5Qk16X282wimJ
 
 Pre-trained model instances from the papers are available [here](https://drive.google.com/drive/folders/1gu3ZI2YrPbmrOtEqIS1XLG8U5c2eNiMc?usp=sharing). Each sub-directory indicates a model and (if applicable) a loss function configuration, while the archive files within are for each type of LM trained, e.g., [BERT](https://github.com/huggingface/transformers/tree/master/src/transformers/models/bert), [RoBERTa](https://github.com/huggingface/transformers/tree/master/src/transformers/models/roberta), or [DeBERTa](https://github.com/huggingface/transformers/tree/master/src/transformers/models/deberta). 
 
